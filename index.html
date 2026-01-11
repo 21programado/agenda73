@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"> 
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestor de Actividades</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .color-primary{background-color:#6699CC}
+    .color-active-text{color:#6699CC}
+    .color-border-active{border-color:#6699CC}
+    body{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;background-color:#f3f4f6}
+    .calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:0;border:1px solid #e5e7eb}
+    .day-cell{min-height:80px;cursor:pointer;transition:background-color .15s;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:8px;font-size:.875rem;border:1px solid #e5e7eb;background-color:white}
+    .day-number{font-weight:700;font-size:1rem}
+    .today{background-color:rgba(219,234,254,.7);border-color:#93c5fd}
+    .today .day-number{color:white;border-radius:9999px;width:1.75rem;height:1.75rem;display:flex;align-items:center;justify-content:center;margin-top:-4px;background-color:#6699CC;box-shadow:0 2px 4px rgba(102,153,204,.4)}
+    .has-activity{border-color:#6699CC;background-color:#e6f0f8}
+    .indicator-activity{color:#6699CC}
+    .day-cell.empty{border:none;background-color:rgba(243,244,246,.5);cursor:default;min-height:50px}
+    .modal{display:none;position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;overflow:auto;background-color:rgba(0,0,0,.6)}
+    .modal-content{margin:10vh auto;background-color:white;padding:1.5rem;border-radius:.75rem;box-shadow:0 25px 50px -12px rgba(0,0,0,.25);width:91.666667%;max-width:32rem}
+    .activity-done .activity-text{text-decoration:line-through;color:#9ca3af}
+    .btn-delete{background-color:#dc2626;color:white;font-weight:700;padding:.75rem 1rem;border-radius:.75rem;transition:background-color .15s;box-shadow:0 4px 6px -1px rgba(0,0,0,.1);letter-spacing:.05em}
+    .btn-small{padding:.4rem .6rem;border-radius:.5rem;font-weight:700;font-size:.875rem}
+    .activity-item:hover{transform:translateY(-2px);transition:transform .12s ease}
+    .muted { color: #6b7280; font-size: .9rem; }
+    #login-screen{position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);display:flex;align-items:center;justify-content:center;z-index:9999}
+    #app-container{display:none}
+  </style>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#6699CC">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+</head>
+
+<body class="p-0 sm:p-4 md:p-8">
+
+<!-- Pantalla de Login -->
+<div id="login-screen">
+  <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4">
+    <div class="text-center mb-8">
+      <h1 class="text-3xl font-bold text-gray-800 mb-2">🔒 Gestor de Actividades</h1>
+      <p class="text-gray-600" id="login-subtitle">Ingresa tu contraseña</p>
+    </div>
+    
+    <form id="login-form" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Contraseña:</label>
+        <input type="password" id="login-password" required class="w-full p-3 border border-gray-300 rounded-xl focus:ring-blue-400 focus:border-blue-400 text-lg">
+      </div>
+      
+      <div id="confirm-password-group" style="display:none;">
+        <label class="block text-sm font-medium text-gray-700 mb-2">Confirmar Contraseña:</label>
+        <input type="password" id="login-password-confirm" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-blue-400 focus:border-blue-400 text-lg">
+      </div>
+      
+      <button type="submit" class="w-full color-primary text-white font-bold py-3 rounded-xl hover:opacity-90 transition duration-150 shadow-lg text-lg">
+        <span id="login-button-text">Ingresar</span>
+      </button>
+      
+      <p id="login-error" class="text-red-600 text-sm text-center font-semibold" style="display:none;"></p>
+    </form>
+  </div>
+</div>
+
+<!-- Aplicación Principal -->
+<div id="app-container">
+<div class="w-full mx-auto bg-white rounded-none sm:rounded-xl shadow-lg min-h-screen sm:min-h-0">
+  <div class="flex w-full justify-around bg-gray-50 border-b border-gray-200">
+    <button class="flex-1 py-4 px-2 font-semibold text-center text-gray-600 hover:text-gray-800 border-b-4 border-transparent transition-colors duration-200" data-tab="calendar">Calendario</button>
+    <button class="flex-1 py-4 px-2 font-semibold text-center text-gray-600 hover:text-gray-800 border-b-4 border-transparent transition-colors duration-200" data-tab="add">Nueva Actividad</button>
+    <button class="flex-1 py-4 px-2 font-semibold text-center text-gray-600 hover:text-gray-800 border-b-4 border-transparent transition-colors duration-200" data-tab="settings">Datos</button>
+  </div>
+
+  <div class="p-4 md:p-6">
+    <div id="calendar-tab" class="tab-content">
+      <div class="flex justify-between items-center mb-6">
+        <button onclick="changeMonth(-1)" class="bg-gray-100 hover:bg-gray-200 p-2 rounded-full shadow-sm text-gray-700 w-10 h-10">&#9664;</button>
+        <h2 id="month-year-header" class="text-xl font-extrabold text-gray-800 tracking-wider"></h2>
+        <button onclick="changeMonth(1)" class="bg-gray-100 hover:bg-gray-200 p-2 rounded-full shadow-sm text-gray-700 w-10 h-10">&#9654;</button>
+      </div>
+      <div id="calendar-grid" class="calendar-grid"></div>
+    </div>
+
+    <div id="add-tab" class="tab-content" style="display:none;">
+      <h2 class="text-2xl font-bold mb-6 text-gray-800 border-b pb-2">Registrar Actividad</h2>
+      <form id="activity-form" class="space-y-6">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Actividad o Tarea:</label>
+          <input type="text" name="actividad" placeholder="Ej: Llamar al cliente A" required class="w-full p-3 border border-gray-300 rounded-xl focus:ring-blue-400 focus:border-blue-400">
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Fecha:</label>
+            <input type="date" name="fecha" required class="w-full p-3 border border-gray-300 rounded-xl focus:ring-blue-400 focus:border-blue-400">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Hora (Opcional):</label>
+            <input type="time" name="hora" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-blue-400 focus:border-blue-400">
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Frecuencia:</label>
+          <select name="repeticion" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-blue-400 focus:border-blue-400">
+            <option value="Puntual">Puntual (Solo hoy)</option>
+            <option value="Diario">Diario</option>
+            <option value="Semanal">Semanal</option>
+            <option value="Mensual">Mensual</option>
+          </select>
+        </div>
+        <button type="submit" class="w-full color-primary text-white font-bold py-3 rounded-xl hover:opacity-90 transition duration-150 shadow-lg">Guardar Actividad</button>
+        <p id="form-message" class="font-semibold mt-2 text-center"></p>
+      </form>
+    </div>
+
+    <div id="settings-tab" class="tab-content" style="display:none;">
+      <h2 class="text-2xl font-bold mb-6 text-gray-800 border-b pb-2">Gestión de Datos</h2>
+
+      <div class="bg-purple-50 border border-purple-200 p-4 rounded-xl shadow-inner mb-6">
+        <h3 class="font-bold text-purple-700 mb-2">🔑 Cambiar Contraseña</h3>
+        <p class="text-sm text-purple-700 mb-3">Actualiza la contraseña de acceso a la aplicación.</p>
+        <form id="change-password-form" class="space-y-3">
+          <input type="password" id="current-password" placeholder="Contraseña actual" required class="w-full p-3 border border-gray-300 rounded-xl focus:ring-purple-400 focus:border-purple-400">
+          <input type="password" id="new-password" placeholder="Nueva contraseña" required class="w-full p-3 border border-gray-300 rounded-xl focus:ring-purple-400 focus:border-purple-400">
+          <input type="password" id="confirm-new-password" placeholder="Confirmar nueva contraseña" required class="w-full p-3 border border-gray-300 rounded-xl focus:ring-purple-400 focus:border-purple-400">
+          <button type="submit" class="w-full bg-purple-600 text-white font-bold py-3 rounded-xl hover:opacity-90 transition duration-150 shadow-md">Cambiar Contraseña</button>
+          <p id="password-change-message" class="text-sm font-semibold text-center"></p>
+        </form>
+      </div>
+
+      <div class="bg-blue-50 border border-blue-200 p-4 rounded-xl shadow-inner mb-6">
+        <h3 class="font-bold text-blue-700 mb-2">Exportar actividades</h3>
+        <p class="text-sm text-blue-700 mb-3">Descarga un respaldo en formato JSON con todas las actividades actuales (incluye el estado "realizada").</p>
+        <button onclick="exportActivities()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:opacity-90 transition duration-150 shadow-md">⬇️ Exportar a archivo JSON</button>
+      </div>
+
+      <div class="bg-green-50 border border-green-200 p-4 rounded-xl shadow-inner mb-6">
+        <h3 class="font-bold text-green-700 mb-2">Importar actividades</h3>
+        <p class="text-sm text-green-700 mb-3">Selecciona un archivo JSON previamente exportado para restaurar las actividades. Podés <strong>Reemplazar</strong> o <strong>Fusionar</strong> (mantener las locales y añadir/actualizar desde el archivo).</p>
+        <input type="file" id="import-file" accept=".json" class="w-full mb-3 p-2 border border-gray-200 rounded-xl bg-white" onchange="importActivities(event)">
+        <div class="flex gap-2">
+          <button onclick="document.getElementById('import-file').click()" class="w-full bg-green-600 text-white font-bold py-3 rounded-xl hover:opacity-90 transition duration-150 shadow-md">⬆️ Seleccionar archivo</button>
+        </div>
+        <p id="last-backup" class="mt-3 muted"></p>
+      </div>
+
+      <div class="bg-red-50 border border-red-200 p-4 rounded-xl shadow-inner mb-6">
+        <p class="mb-4 text-red-700 font-medium"><span class="font-extrabold mr-1">¡Advertencia!</span> Esta acción es irreversible y eliminará permanentemente todas las actividades guardadas en este dispositivo.</p>
+        <button onclick="clearAllData()" class="btn-delete w-full">🔴 Borrar Todos los Datos Almacenados</button>
+      </div>
+
+      <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-xl shadow-inner">
+        <p class="mb-4 text-yellow-700 font-medium"><span class="font-extrabold mr-1">Cerrar Sesión</span></p>
+        <button onclick="logout()" class="w-full bg-yellow-600 text-white font-bold py-3 rounded-xl hover:opacity-90 transition duration-150 shadow-md">🚪 Cerrar Sesión</button>
+      </div>
+
+      <p id="clear-message" class="font-bold mt-4 text-center"></p>
+    </div>
+  </div>
+</div>
+</div>
+
+<div id="activity-modal" class="modal"></div>
+
+<div id="importModal" class="modal hidden items-center justify-center">
+  <div class="modal-content">
+    <h2 class="text-xl font-bold mb-4">Importar actividades</h2>
+    <p class="mb-4 text-gray-700">¿Cómo deseas importar el archivo? Elige una opción:</p>
+
+    <div class="space-y-3">
+      <button id="replaceImportBtn" class="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded">
+        Reemplazar (eliminar todas las actividades actuales)
+      </button>
+
+      <button id="mergeImportBtn" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded">
+        Fusionar (conservar actividades actuales y sumar las del archivo)
+      </button>
+
+      <button id="cancelImportBtn" class="w-full bg-gray-500 hover:bg-gray-600 text-white py-2 rounded">
+        Cancelar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* -----------------------
+  SISTEMA DE AUTENTICACIÓN
+   ----------------------- */
+function hashPassword(password) {
+  // Simple hash para demo - en producción usar algo más robusto
+  let hash = 0;
+  for (let i = 0; i < password.length; i++) {
+    const char = password.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return hash.toString();
+}
+
+function checkAuth() {
+  const storedHash = localStorage.getItem('appPasswordHash');
+  return storedHash !== null;
+}
+
+function verifyPassword(password) {
+  const storedHash = localStorage.getItem('appPasswordHash');
+  return hashPassword(password) === storedHash;
+}
+
+function setPassword(password) {
+  localStorage.setItem('appPasswordHash', hashPassword(password));
+}
+
+function showLoginScreen() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app-container').style.display = 'none';
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-container').style.display = 'block';
+}
+
+function logout() {
+  if (confirm('¿Estás seguro que deseas cerrar sesión?')) {
+    showLoginScreen();
+    document.getElementById('login-password').value = '';
+    document.getElementById('login-error').style.display = 'none';
+  }
+}
+
+// Manejo del formulario de login
+document.getElementById('login-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  
+  const password = document.getElementById('login-password').value;
+  const errorEl = document.getElementById('login-error');
+  
+  if (!checkAuth()) {
+    // Primera vez - configurar contraseña
+    const confirmPassword = document.getElementById('login-password-confirm').value;
+    
+    if (password.length < 4) {
+      errorEl.textContent = 'La contraseña debe tener al menos 4 caracteres';
+      errorEl.style.display = 'block';
+      return;
+    }
+    
+    if (password !== confirmPassword) {
+      errorEl.textContent = 'Las contraseñas no coinciden';
+      errorEl.style.display = 'block';
+      return;
+    }
+    
+    setPassword(password);
+    showApp();
+  } else {
+    // Login normal
+    if (verifyPassword(password)) {
+      errorEl.style.display = 'none';
+      showApp();
+    } else {
+      errorEl.textContent = 'Contraseña incorrecta';
+      errorEl.style.display = 'block';
+    }
+  }
+});
+
+// Cambiar contraseña
+document.getElementById('change-password-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  
+  const currentPassword = document.getElementById('current-password').value;
+  const newPassword = document.getElementById('new-password').value;
+  const confirmPassword = document.getElementById('confirm-new-password').value;
+  const messageEl = document.getElementById('password-change-message');
+  
+  if (!verifyPassword(currentPassword)) {
+    messageEl.textContent = 'Contraseña actual incorrecta';
+    messageEl.style.color = '#dc2626';
+    messageEl.style.display = 'block';
+    setTimeout(() => messageEl.textContent = '', 3000);
+    return;
+  }
+  
+  if (newPassword.length < 4) {
+    messageEl.textContent = 'La nueva contraseña debe tener al menos 4 caracteres';
+    messageEl.style.color = '#dc2626';
+    messageEl.style.display = 'block';
+    setTimeout(() => messageEl.textContent = '', 3000);
+    return;
+  }
+  
+  if (newPassword !== confirmPassword) {
+    messageEl.textContent = 'Las contraseñas nuevas no coinciden';
+    messageEl.style.color = '#dc2626';
+    messageEl.style.display = 'block';
+    setTimeout(() => messageEl.textContent = '', 3000);
+    return;
+  }
+  
+  setPassword(newPassword);
+  messageEl.textContent = '✓ Contraseña cambiada exitosamente';
+  messageEl.style.color = '#16a34a';
+  messageEl.style.display = 'block';
+  
+  this.reset();
+  setTimeout(() => messageEl.textContent = '', 3000);
+});
+
+/* -----------------------
+  Datos/Constantes y Setup
+   ----------------------- */
+const TODAY = new Date();
+const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const DAY_NAMES = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+
+let currentMonth = TODAY.getMonth();
+let currentYear = TODAY.getFullYear();
+let allActivities = [];
+
+// Inicialización
+document.addEventListener('DOMContentLoaded', () => {
+  // Verificar autenticación
+  if (!checkAuth()) {
+    // Primera vez - mostrar pantalla de configuración
+    document.getElementById('login-subtitle').textContent = 'Configura tu contraseña de acceso';
+    document.getElementById('login-button-text').textContent = 'Crear Contraseña';
+    document.getElementById('confirm-password-group').style.display = 'block';
+    showLoginScreen();
+  } else {
+    // Ya hay contraseña - mostrar login normal
+    showLoginScreen();
+  }
+  
+  loadActivitiesFromStorage();
+  updateLastBackupUI();
+
+  const initialTabButton = document.querySelector('[data-tab="calendar"]');
+  if(initialTabButton) initialTabButton.classList.add('active');
+
+  renderCalendar(currentMonth, currentYear);
+  initializeModalStructure();
+
+  document.querySelectorAll(".flex-1").forEach(btn => {
+    btn.addEventListener("click", () => showTab(btn.dataset.tab, btn));
+  });
+
+  const form = document.getElementById("activity-form");
+  if (form) form.addEventListener("submit", handleFormSubmit);
+
+  document.getElementById("replaceImportBtn").addEventListener("click", handleReplaceImport);
+  document.getElementById("mergeImportBtn").addEventListener("click", handleMergeImport);
+  document.getElementById("cancelImportBtn").addEventListener("click", closeImportModal);
+
+  document.getElementById("activity-modal").addEventListener('click', function(e){
+    if (e.target.id === 'activity-modal') closeModal();
+  });
+});
+
+/* -----------------------
+  Storage helpers
+   ----------------------- */
+function normalizeActivity(obj) {
+  return {
+    id: obj.id || Date.now() + Math.floor(Math.random()*1000),
+    fecha: obj.fecha || getFormattedDateStr(new Date()),
+    hora: obj.hora || '',
+    actividad: obj.actividad || obj.descripcion || obj.title || '',
+    repeticion: obj.repeticion || 'Puntual',
+    realizado: typeof obj.realizado === 'boolean' ? obj.realizado : !!obj.done || false
+  };
+}
+
+function loadActivitiesFromStorage(){
+  try{
+    const stored = localStorage.getItem('localActivitiesDB');
+    const parsed = stored ? JSON.parse(stored) : [];
+    allActivities = Array.isArray(parsed) ? parsed.map(normalizeActivity) : [];
+  }catch(e){
+    console.error("Error al cargar localStorage:", e);
+    allActivities = [];
+  }
+}
+
+function saveActivitiesToStorage(){
+  localStorage.setItem('localActivitiesDB', JSON.stringify(allActivities));
+  try{
+    localStorage.setItem('localActivitiesBackup', JSON.stringify({ts:Date.now(),data:allActivities}));
+    updateLastBackupUI();
+  }catch(e){
+    console.warn("No se pudo guardar backup interno:", e);
+  }
+}
+
+/* -----------------------
+  UI helpers
+   ----------------------- */
+function updateLastBackupUI(){
+  const el = document.getElementById('last-backup');
+  try{
+    const b = JSON.parse(localStorage.getItem('localActivitiesBackup') || 'null');
+    if (b && b.ts){
+      const d = new Date(b.ts);
+      el.innerText = `Último backup interno: ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      return;
+    }
+  }catch(e){}
+  el.innerText = 'No hay backup interno disponible.';
+}
+function pad(n){ return String(n).padStart(2,'0'); }
+
+/* -----------------------
+  Tabs
+   ----------------------- */
+function showTab(id) {
+  document.querySelectorAll(".tab-content").forEach(c => c.style.display = "none");
+  const el = document.querySelector("#" + id + "-tab");
+  if (el) el.style.display = "block";
+
+  document.querySelectorAll(".flex-1").forEach(btn => btn.classList.remove("active","color-active-text","font-extrabold"));
+  const activeBtn = document.querySelector(`[data-tab="${id}"]`);
+  if (activeBtn) {
+    activeBtn.classList.add("active","color-active-text","font-extrabold");
+    activeBtn.style.borderColor = "#6699CC";
+  }
+  document.querySelectorAll(".flex-1").forEach(btn=>{ if(btn.dataset.tab !== id) btn.style.borderColor = "transparent"; });
+
+  if (id === 'calendar') renderCalendar(currentMonth, currentYear);
+}
+
+/* -----------------------
+  Calendar rendering
+   ----------------------- */
+function changeMonth(delta){
+  currentMonth += delta;
+  if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+  else if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+  renderCalendar(currentMonth, currentYear);
+}
+
+function renderCalendar(month, year){
+  const firstDay = new Date(year, month, 1).getDay();
+  const days = new Date(year, month + 1, 0).getDate();
+  const todayStr = getFormattedDateStr(TODAY);
+
+  document.getElementById("month-year-header").innerText = `${MONTH_NAMES[month]} ${year}`;
+
+  const grid = document.getElementById("calendar-grid");
+  grid.innerHTML = "";
+
+  DAY_NAMES.forEach(d => {
+    const div = document.createElement("div");
+    div.className = "text-center py-2 font-bold text-xs uppercase text-gray-600 bg-gray-200 border border-gray-300";
+    div.innerText = d;
+    grid.appendChild(div);
+  });
+
+  for (let i = 0; i < firstDay; i++) {
+    const div = document.createElement("div");
+    div.className = "day-cell empty";
+    grid.appendChild(div);
+  }
+
+  for (let d = 1; d <= days; d++){
+    const date = new Date(year, month, d);
+    const dateStr = getFormattedDateStr(date);
+
+    const cell = document.createElement("div");
+    cell.className = "day-cell";
+    cell.dataset.date = dateStr;
+
+    cell.innerHTML = `<div class="day-number w-full text-center">${d}</div>`;
+
+    if (dateStr === todayStr) cell.classList.add("today");
+
+    const activities = getActivitiesForDate(dateStr);
+    if (activities.length > 0) {
+      cell.classList.add("has-activity");
+      cell.innerHTML += `<div class="indicator-activity text-xs mt-1">● Tareas</div>`;
+    }
+
+    cell.onclick = () => openActivitiesModal(dateStr);
+    grid.appendChild(cell);
+  }
+}
+
+/* -----------------------
+  Modal actividades
+   ----------------------- */
+function initializeModalStructure() {
+  const modal = document.getElementById("activity-modal");
+  modal.innerHTML = `
+    <div class="modal-content" data-date="">
+      <div class="flex justify-between items-center mb-4">
+        <h3 id="modal-date-header" class="text-xl font-semibold text-gray-800"></h3>
+        <span class="close-button text-gray-500 hover:text-gray-900 text-3xl cursor-pointer" onclick="closeModal()">&times;</span>
+      </div>
+      <div id="activity-list" class="space-y-3 mt-4"></div>
+      <p id="modal-empty" class="text-center text-gray-500 italic py-4 border border-dashed border-gray-300 rounded-lg mt-4" style="display:none;">🎉 ¡Nada pendiente! ¡Disfruta tu día!</p>
+    </div>
+  `;
+}
+
+function openActivitiesModal(dateStr) {
+  initializeModalStructure();
+
+  const modalContent = document.getElementById("activity-modal").querySelector('.modal-content');
+  const modalHeader = document.getElementById("modal-date-header");
+  const list = document.getElementById("activity-list");
+  const modalEmpty = document.getElementById("modal-empty");
+
+  if (modalContent) modalContent.dataset.date = dateStr;
+  if (modalHeader) modalHeader.innerText = `Actividades para el ${formatDate(dateStr)}`;
+
+  list.innerHTML = "";
+  const activities = getActivitiesForDate(dateStr);
+
+  if (activities.length === 0) {
+    if (modalEmpty) modalEmpty.style.display = "block";
+  } else {
+    if (modalEmpty) modalEmpty.style.display = "none";
+    renderModalActivities(activities, list);
+  }
+
+  document.getElementById("activity-modal").style.display = "block";
+}
+
+function closeModal() {
+  document.getElementById("activity-modal").style.display = "none";
+  renderCalendar(currentMonth, currentYear);
+}
+
+function renderModalActivities(activities, listElement) {
+  activities.forEach(item => {
+    const div = document.createElement("div");
+    div.className = "flex items-start space-x-3 p-4 bg-white rounded-xl shadow-sm border border-gray-200 activity-item";
+    if (item.realizado) div.classList.add('activity-done');
+
+    const left = document.createElement("div");
+    left.className = "flex-shrink-0";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "form-checkbox h-6 w-6 text-blue-500 rounded-full focus:ring-blue-400 border-gray-300 mt-1";
+    checkbox.checked = item.realizado;
+    checkbox.onchange = (e) => toggleDone(item.id, e.target.checked);
+    left.appendChild(checkbox);
+
+    const middle = document.createElement("div");
+    middle.className = "flex-grow ml-3";
+    const horaTexto = item.hora && item.hora.trim() !== "" ? item.hora : "Todo el día";
+    const textSpan = document.createElement("span");
+    textSpan.className = "activity-text flex-grow text-gray-700 font-medium";
+    textSpan.innerHTML = `<div class="mb-1"><span class="font-bold mr-1 text-gray-900">${horaTexto}</span>${escapeHtml(item.actividad)}<span class="text-xs text-gray-400 italic">(${item.repeticion})</span></div>`;
+    middle.appendChild(textSpan);
+
+    const right = document.createElement("div");
+    right.className = "flex flex-col items-end space-y-2";
+    const btnEdit = document.createElement("button");
+    btnEdit.className = "btn-small bg-gray-100 text-gray-700 px-3 rounded-md";
+    btnEdit.innerText = "Editar";
+    btnEdit.onclick = () => openEditModal(item);
+    const btnDelete = document.createElement("button");
+    btnDelete.className = "btn-small bg-red-600 text-white px-3 rounded-md";
+    btnDelete.innerText = "Eliminar";
+    btnDelete.onclick = () => { if (confirm("¿Eliminar esta actividad? Esta acción no se puede deshacer.")) { deleteActivity(item.id); } };
+
+    right.appendChild(btnEdit);
+    right.appendChild(btnDelete);
+
+    div.appendChild(left);
+    div.appendChild(middle);
+    div.appendChild(right);
+
+    listElement.appendChild(div);
+  });
+}
+
+/* -----------------------
+  Editar / Borrar / Toggle
+   ----------------------- */
+function openEditModal(item) {
+  const modal = document.getElementById("activity-modal");
+  modal.innerHTML = `
+  <div class="modal-content" data-edit-id="${item.id}">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-xl font-semibold text-gray-800">Editar actividad</h3>
+      <span class="close-button text-gray-500 hover:text-gray-900 text-3xl cursor-pointer" onclick="initializeModalStructure(); document.getElementById('activity-modal').style.display='none'; renderCalendar(currentMonth, currentYear);">&times;</span>
+    </div>
+    <form id="edit-form" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Actividad o Tarea:</label>
+        <input type="text" name="actividad" value="${escapeAttr(item.actividad)}" required class="w-full p-3 border border-gray-300 rounded-xl focus:ring-blue-400 focus:border-blue-400">
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Fecha:</label>
+          <input type="date" name="fecha" value="${item.fecha}" required class="w-full p-3 border border-gray-300 rounded-xl focus:ring-blue-400 focus:border-blue-400">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Hora (Opcional):</label>
+          <input type="time" name="hora" value="${item.hora||''}" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-blue-400 focus:border-blue-400">
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Frecuencia:</label>
+        <select name="repeticion" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-blue-400 focus:border-blue-400">
+          <option value="Puntual" ${item.repeticion==='Puntual'?'selected':''}>Puntual (Solo hoy)</option>
+          <option value="Diario" ${item.repeticion==='Diario'?'selected':''}>Diario</option>
+          <option value="Semanal" ${item.repeticion==='Semanal'?'selected':''}>Semanal</option>
+          <option value="Mensual" ${item.repeticion==='Mensual'?'selected':''}>Mensual</option>
+        </select>
+      </div>
+      <div class="flex space-x-3">
+        <button type="submit" class="w-full color-primary text-white font-bold py-3 rounded-xl hover:opacity-90 transition duration-150 shadow-lg">Guardar cambios</button>
+        <button type="button" id="delete-in-edit" class="w-40 bg-red-600 text-white font-bold py-3 rounded-xl hover:opacity-90 transition duration-150 shadow-md">Eliminar</button>
+      </div>
+    </form>
+  </div>
+  `;
+  modal.style.display='block';
+  const editForm=document.getElementById('edit-form');
+  editForm.addEventListener('submit',function(e){
+    e.preventDefault();
+    const formData=Object.fromEntries(new FormData(editForm).entries());
+    updateActivity(item.id,{actividad:formData.actividad,fecha:formData.fecha,hora:formData.hora||'',repeticion:formData.repeticion});
+    initializeModalStructure();
+    const dateStr=formData.fecha;
+    openActivitiesModal(dateStr);
+  });
+  document.getElementById('delete-in-edit').addEventListener('click',function(){if(confirm("¿Eliminar definitivamente esta actividad?")){deleteActivity(item.id);initializeModalStructure();document.getElementById('activity-modal').style.display='none';renderCalendar(currentMonth,currentYear);}});
+}
+
+function toggleDone(id, isChecked) {
+  const activity = allActivities.find(a => a.id === id);
+  if (activity) {
+    activity.realizado = isChecked;
+    saveActivitiesToStorage();
+    const dateStr = document.getElementById("activity-modal").querySelector('.modal-content')?.dataset.date;
+    if (dateStr) openActivitiesModal(dateStr);
+    else renderCalendar(currentMonth, currentYear);
+  }
+}
+
+function updateActivity(id, changes) {
+  const idx = allActivities.findIndex(a => a.id === id);
+  if (idx !== -1) {
+    allActivities[idx] = { ...allActivities[idx], ...changes };
+    if (typeof allActivities[idx].realizado !== 'boolean') allActivities[idx].realizado = false;
+    saveActivitiesToStorage();
+  }
+}
+
+function deleteActivity(id) {
+  allActivities = allActivities.filter(a => a.id !== id);
+  saveActivitiesToStorage();
+  initializeModalStructure();
+  document.getElementById('activity-modal').style.display = 'none';
+  renderCalendar(currentMonth, currentYear);
+}
+
+/* -----------------------
+  Formulario agregar
+   ----------------------- */
+function handleFormSubmit(e) {
+  e.preventDefault();
+  const form = e.target;
+  const data = Object.fromEntries(new FormData(form).entries());
+  const msg = document.getElementById("form-message");
+  msg.innerText = "Guardando...";
+  msg.style.color = "#6699CC";
+
+  const newActivity = {
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    fecha: data.fecha,
+    hora: data.hora || '',
+    actividad: data.actividad,
+    repeticion: data.repeticion,
+    realizado: false
+  };
+
+  allActivities.push(newActivity);
+  saveActivitiesToStorage();
+
+  msg.innerText = "Actividad guardada con éxito.";
+  msg.style.color = "#6699CC";
+  form.reset();
+
+  if (new Date(newActivity.fecha).getMonth() === currentMonth && new Date(newActivity.fecha).getFullYear() === currentYear) {
+    renderCalendar(currentMonth, currentYear);
+  }
+  setTimeout(() => { msg.innerText = ""; }, 2500);
+}
+
+/* -----------------------
+  Utilidades de fecha / filtros
+   ----------------------- */
+function getActivitiesForDate(dateStr) {
+  return allActivities.filter(item => item.fecha === dateStr)
+                      .sort((a,b) => (a.hora || 'ZZZZ') > (b.hora || 'ZZZZ') ? 1 : -1);
+}
+
+function getFormattedDateStr(dateObj) {
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatDate(str) {
+  const p = str.split("-");
+  return `${p[2]}/${p[1]}/${p[0]}`;
+}
+
+/* -----------------------
+  Export / Import
+   ----------------------- */
+function exportActivities() {
+  const normalized = allActivities.map(a => ({
+    id: a.id,
+    fecha: a.fecha,
+    hora: a.hora || '',
+    actividad: a.actividad || '',
+    repeticion: a.repeticion || 'Puntual',
+    realizado: !!a.realizado
+  }));
+  const data = JSON.stringify(normalized, null, 2);
+  const blob = new Blob([data], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "actividades_backup.json";
+  a.click();
+  URL.revokeObjectURL(url);
+  alert("✔ Archivo exportado con éxito (incluye el estado 'realizado')");
+}
+
+function importActivities(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+
+  reader.onload = function(e) {
+    try {
+      const importedData = JSON.parse(e.target.result);
+
+      if (!Array.isArray(importedData)) {
+        alert("El archivo no contiene un formato válido (se espera un array).");
+        return;
+      }
+
+      window.__importBuffer = importedData.map(normalizeActivity);
+
+      const modal = document.getElementById("importModal");
+      modal.classList.remove('hidden');
+      modal.style.display = 'flex';
+
+    } catch (err) {
+      alert("Error leyendo el archivo: " + err.message);
+    }
+  };
+
+  reader.readAsText(file);
+}
+
+function handleReplaceImport() {
+  if (!window.__importBuffer) { closeImportModal(); return; }
+  if (!confirm("Se eliminarán todas las actividades actuales y se cargarán las del archivo. ¿Deseas continuar?")) return;
+  allActivities = window.__importBuffer.slice();
+  saveActivitiesToStorage();
+  closeImportModal();
+  renderCalendar(currentMonth, currentYear);
+  alert("Actividades reemplazadas exitosamente.");
+}
+
+function handleMergeImport() {
+  if (!window.__importBuffer) { closeImportModal(); return; }
+  const idsExistentes = new Set(allActivities.map(a => a.id));
+  const toAdd = window.__importBuffer.map(a => {
+    if (idsExistentes.has(a.id)) {
+      return { ...a, id: Date.now() + Math.floor(Math.random()*1000) };
+    }
+    return a;
+  }).filter(a => {
+    return true;
+  });
+
+  allActivities = [...allActivities, ...toAdd];
+  saveActivitiesToStorage();
+  closeImportModal();
+  renderCalendar(currentMonth, currentYear);
+  alert("Actividades fusionadas (importadas) exitosamente.");
+}
+
+function closeImportModal() {
+  const modal = document.getElementById("importModal");
+  modal.classList.add('hidden');
+  modal.style.display = 'none';
+  window.__importBuffer = null;
+}
+
+/* -----------------------
+  Utils escape
+   ----------------------- */
+function escapeHtml(str){ if(!str) return ''; return String(str).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#39;"); }
+function escapeAttr(str){ if(!str) return ''; return String(str).replaceAll('"','&quot;').replaceAll("'","&#39;"); }
+
+/* -----------------------
+  Borrar todo
+   ----------------------- */
+function clearAllData(){
+  const modal=document.getElementById("activity-modal");
+  modal.innerHTML=`
+    <div class="modal-content bg-red-100 ring-4 ring-red-300">
+      <h3 class="text-xl font-bold text-red-800 mb-4">⚠️ Confirmar Borrado Total</h3>
+      <p class="mb-6 text-red-700">¿Estás absolutamente seguro de que quieres borrar TODAS las actividades guardadas en este dispositivo? Esta acción no se puede deshacer.</p>
+      <div class="flex flex-col space-y-3">
+        <button class="btn-delete" onclick="confirmDeleteData()">Sí, Confirmar Borrado</button>
+        <button class="bg-gray-300 text-gray-800 font-bold py-3 px-4 rounded-xl hover:bg-gray-400 transition duration-150 shadow-md" onclick="document.getElementById('activity-modal').style.display='none'; initializeModalStructure();">Cancelar</button>
+      </div>
+    </div>`;
+  modal.style.display='block';
+}
+function confirmDeleteData(){ localStorage.removeItem('localActivitiesDB'); localStorage.removeItem('localActivitiesBackup'); allActivities=[]; initializeModalStructure(); const msg=document.getElementById("clear-message"); if(msg){ msg.innerText="Datos borrados. Recargando..."; msg.style.color="#ef4444"; } setTimeout(()=>{ location.reload(); },500); }
+
+renderCalendar(currentMonth, currentYear);
+
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js')
+      .then(() => console.log('Service Worker registrado'))
+      .catch(err => console.error('SW error', err));
+  });
+}
+</script>
+
+</body>
+</html>
