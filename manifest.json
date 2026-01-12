@@ -1,6 +1,6 @@
 {
   "name": "Gestor de Actividades",
-  "short_name": "Actividades",
+  "short_name": "Agenda",
   "description": "Gestor personal de actividades con calendario y almacenamiento local",
   "start_url": "./index.html",
   "display": "standalone",
@@ -20,3 +20,4 @@
     }
   ]
 }
+
